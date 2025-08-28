@@ -142,11 +142,15 @@
 
         // --- State Changers & Actions ---
         function navigate(view) {
+            // Don't push a new history entry if the view isn't changing
+            if (state.currentView === view) return;
+
             if (state.currentView === 'workout' && state.timerInterval) {
                 clearInterval(state.timerInterval);
                 state.timerInterval = null;
             }
             state.currentView = view;
+            history.pushState({ view }, '', `#${view}`);
             render();
         }
 
@@ -699,8 +703,27 @@
 
         function init() {
             loadData();
+            const initialView = window.location.hash.substring(1) || 'dashboard';
+            state.currentView = initialView;
+            history.replaceState({ view: initialView }, '', `#${initialView}`);
             render();
         }
+
+        window.addEventListener('popstate', e => {
+            if (state.currentView === 'workout' && state.timerInterval) {
+                clearInterval(state.timerInterval);
+                state.timerInterval = null;
+            }
+
+            if (e.state && e.state.view) {
+                state.currentView = e.state.view;
+                render();
+            } else {
+                // Fallback to dashboard if state is null
+                state.currentView = 'dashboard';
+                render();
+            }
+        });
         
         init();
     </script>

@@ -154,6 +154,29 @@
                 });
         }
 
+        function createNumberDial(label, value, actionType, fieldType, min = 0) {
+            const increment = 1;
+            return `
+                <div class="bg-white rounded-lg p-4 shadow-sm border">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">${label}</label>
+                    <div class="flex items-center justify-center space-x-3">
+                        <button data-action="${actionType}" data-id="-${increment}" class="w-10 h-10 bg-blue-500 text-white rounded-full flex items-center justify-center text-lg font-bold touch-manipulation active:bg-blue-600">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                        </button>
+                        <input type="number" data-field="${fieldType}" value="${value}" class="w-20 text-center text-xl font-bold border rounded-lg py-2 px-3" min="${min}">
+                        <button data-action="${actionType}" data-id="${increment}" class="w-10 h-10 bg-blue-500 text-white rounded-full flex items-center justify-center text-lg font-bold touch-manipulation active:bg-blue-600">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
         // --- State Changers & Actions ---
         function navigate(view) {
             // Don't push a new history entry if the view isn't changing
@@ -698,18 +721,32 @@
         }
 
         function renderWorkout() {
-            const currentExercise = state.currentWorkout.exercises[state.currentExerciseIndex];
+            const workout = state.currentWorkout;
+            const currentExercise = workout.exercises[state.currentExerciseIndex];
             const isReps = currentExercise.type === 'reps';
-            
-            let exerciseUI;
 
+            // Calculate progress
+            const totalSets = workout.exercises.reduce((sum, ex) => sum + ex.sets, 0);
+            let completedSets = 0;
+            for (let i = 0; i < state.currentExerciseIndex; i++) {
+                completedSets += workout.exercises[i].sets;
+            }
+            completedSets += state.currentSetIndex;
+            const progress = totalSets > 0 ? ((completedSets) / totalSets) * 100 : 0;
+
+            let exerciseUI;
             if (isReps) {
                 exerciseUI = `
                     <div class="space-y-4">
-                        <div class="bg-white rounded-lg p-4 shadow-sm border"><label class="block text-sm font-medium text-gray-700 mb-2">Reps</label><div class="flex items-center justify-center space-x-3"><button data-action="update-reps" data-id="-1" class="w-12 h-12 bg-blue-500 text-white rounded-full flex items-center justify-center text-lg font-bold touch-manipulation active:bg-blue-600"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg></button><input type="number" data-field="currentReps" value="${state.currentReps}" class="w-24 text-center text-2xl font-bold border-b-2 py-2 px-3" min="0"><button data-action="update-reps" data-id="1" class="w-12 h-12 bg-blue-500 text-white rounded-full flex items-center justify-center text-lg font-bold touch-manipulation active:bg-blue-600"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></div></div>
-                        <div class="bg-white rounded-lg p-4 shadow-sm border"><label class="block text-sm font-medium text-gray-700 mb-2">Weight (lbs)</label><div class="flex items-center justify-center space-x-3"><button data-action="update-weight" data-id="-1" class="w-12 h-12 bg-blue-500 text-white rounded-full flex items-center justify-center text-lg font-bold touch-manipulation active:bg-blue-600"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg></button><input type="number" data-field="currentWeight" value="${state.currentWeight}" class="w-24 text-center text-2xl font-bold border-b-2 py-2 px-3" min="0"><button data-action="update-weight" data-id="1" class="w-12 h-12 bg-blue-500 text-white rounded-full flex items-center justify-center text-lg font-bold touch-manipulation active:bg-blue-600"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></div></div>
+                        ${createNumberDial('Reps', state.currentReps, 'update-reps', 'currentReps', 1)}
+                        ${createNumberDial('Weight (lbs)', state.currentWeight, 'update-weight', 'currentWeight', 0)}
                     </div>
-                    <button data-action="complete-set" class="w-full bg-green-600 text-white p-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 touch-manipulation active:bg-green-700">Complete Set</button>
+                    <button data-action="complete-set" class="w-full bg-green-600 text-white p-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 touch-manipulation active:bg-green-700">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="20,6 9,17 4,12"></polyline>
+                        </svg>
+                        Complete Set
+                    </button>
                 `;
             } else { // Time-based exercise
                 const recordDuration = state.lastDuration > 0 ? state.lastDuration : currentExercise.duration;
@@ -723,7 +760,7 @@
                         ${state.timerState === 'idle' && state.lastDuration > 0 ? `<p class="font-semibold text-blue-600 text-lg animate-pulse">BEAT IT!</p>` : ''}
                         ${isBeatingRecord ? `<p class="font-semibold text-green-600 text-lg">NEW RECORD!</p>` : ''}
                     </div>
-                    ${state.timerState === 'running' 
+                    ${state.timerState === 'running'
                         ? `<button data-action="stop-timer" class="w-full bg-red-500 text-white p-4 rounded-xl font-bold text-lg touch-manipulation">Done</button>`
                         : `<button data-action="start-timer" class="w-full bg-green-600 text-white p-4 rounded-xl font-bold text-lg touch-manipulation">Start</button>`
                     }
@@ -731,22 +768,43 @@
             }
 
             return `
-                <div class="gradient-green text-white p-6 sticky top-0 shadow-md">
-                    <div class="flex items-center justify-between">
-                        <h1 class="text-xl font-bold">${state.currentWorkout.name}</h1>
-                        <div class="flex gap-2">
-                           <button data-action="save-and-exit" class="text-sm font-medium bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg touch-manipulation">Save & Exit</button>
-                           <button data-action="finish-early" class="text-sm font-medium bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg touch-manipulation">Finish Early</button>
-                        </div>
+                <div class="gradient-green text-white p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <button data-action="navigate" data-id="dashboard" class="touch-manipulation">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="19" y1="12" x2="5" y2="12"></line>
+                                <polyline points="12,19 5,12 12,5"></polyline>
+                            </svg>
+                        </button>
+                        <h1 class="text-xl font-bold">${workout.name}</h1>
+                        <div class="w-6"></div>
                     </div>
+
+                    <div class="bg-green-700 rounded-full h-2 mb-2">
+                        <div class="bg-white rounded-full h-2 transition-all duration-300" style="width: ${progress}%"></div>
+                    </div>
+                    <p class="text-green-100 text-sm text-center">${Math.round(progress)}% Complete</p>
                 </div>
 
-                <div class="p-4 md:p-6 space-y-6">
+                <div class="p-6 space-y-6">
                     <div class="text-center">
-                        <h2 class="text-2xl font-bold text-gray-800 mb-1">${currentExercise.name}</h2>
+                        <h2 class="text-2xl font-bold text-gray-800 mb-2">${currentExercise.name}</h2>
                         <p class="text-gray-600">Set ${state.currentSetIndex + 1} of ${currentExercise.sets}</p>
                     </div>
+
                     ${exerciseUI}
+
+                    <div class="bg-white p-4 rounded-xl shadow-sm border">
+                        <h3 class="font-semibold text-gray-800 mb-2">Remaining Exercises</h3>
+                        <div class="space-y-1 text-sm">
+                            ${workout.exercises.slice(state.currentExerciseIndex).map((exercise, index) => `
+                                <div class="flex justify-between ${index === 0 ? 'text-green-600 font-medium' : 'text-gray-600'}">
+                                    <span>${exercise.name}</span>
+                                    <span>${exercise.sets} × ${exercise.reps || exercise.duration + 's'}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
                 </div>
             `;
         }

@@ -134,23 +134,35 @@
             const sessions = state.workoutHistory
                 .filter(record => record.planId === planId)
                 .reduce((acc, record) => {
-                    const sessionId = record.sessionId || new Date(record.date).toLocaleDateString();
-                    if (!acc[sessionId]) {
-                        acc[sessionId] = {
-                            date: new Date(record.date).toLocaleString(),
+                    // Use sessionId if available, otherwise group by date for legacy data
+                    const key = record.sessionId || new Date(record.date).toLocaleDateString();
+                    if (!acc[key]) {
+                        acc[key] = {
+                            sessionId: record.sessionId, // Store sessionId
                             records: []
                         };
                     }
-                    acc[sessionId].records.push(record);
+                    acc[key].records.push(record);
                     return acc;
                 }, {});
 
             return Object.values(sessions)
-                .sort((a, b) => new Date(b.date) - new Date(a.date))
                 .map(session => {
                     session.records.sort((a, b) => new Date(a.date) - new Date(b.date));
-                    return session;
-                });
+                    const startTime = new Date(session.records[0].date);
+                    const lastRecord = session.records[session.records.length - 1];
+                    let endTime = new Date(lastRecord.date);
+
+                    // An active workout is one that has been paused. Its sessionId will be in savedWorkout.
+                    const isComplete = !(state.savedWorkout && state.savedWorkout.sessionId === session.sessionId);
+
+                    if (!isComplete) {
+                        endTime = null;
+                    }
+
+                    return { ...session, startTime, endTime, isComplete };
+                })
+                .sort((a, b) => b.startTime - a.startTime);
         }
 
         function createNumberDial(label, value, actionType, fieldType, min = 0) {
@@ -222,6 +234,7 @@
                 planId: state.currentWorkout.id,
                 exerciseIndex: state.currentExerciseIndex,
                 setIndex: state.currentSetIndex,
+                sessionId: state.currentSessionId,
             };
             saveData();
             state.currentWorkout = null; // Exit the workout state
@@ -237,7 +250,7 @@
         function resumeWorkout() {
             if (!state.savedWorkout) return;
 
-            const { planId, exerciseIndex, setIndex } = state.savedWorkout;
+            const { planId, exerciseIndex, setIndex, sessionId } = state.savedWorkout;
             const plan = getPlanById(planId);
             if (!plan) {
                 // The plan might have been deleted. Clear the saved state.
@@ -250,6 +263,7 @@
             state.currentWorkout = plan;
             state.currentExerciseIndex = exerciseIndex;
             state.currentSetIndex = setIndex;
+            state.currentSessionId = sessionId;
 
             const currentExercise = plan.exercises[exerciseIndex];
             if (currentExercise.type === 'reps') {
@@ -548,6 +562,24 @@
             const plan = state.selectedPlan;
             const sessions = getWorkoutSessions(plan.id);
 
+            const formatSessionDate = (session) => {
+                const { startTime, endTime, isComplete } = session;
+
+                const formatDate = (date) => date.toLocaleDateString([], { month: 'numeric', day: 'numeric', year: 'numeric' });
+                const formatTime = (date) => date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+
+                if (!isComplete) {
+                    return `${formatDate(startTime)}, ${formatTime(startTime)} - TBD (Incomplete)`;
+                }
+
+                const onSameDay = startTime.toDateString() === endTime.toDateString();
+                if (onSameDay) {
+                    return `${formatDate(startTime)}, ${formatTime(startTime)} - ${formatTime(endTime)}`;
+                }
+
+                return `${formatDate(startTime)}, ${formatTime(startTime)} - ${formatDate(endTime)}, ${formatTime(endTime)}`;
+            };
+
             return `
                 <div class="gradient-bg text-white p-6 flex items-center gap-3 sticky top-0 shadow-md">
                     <button data-action="navigate" data-id="dashboard" class="touch-manipulation p-2 -ml-2">
@@ -595,7 +627,7 @@
                                 ${sessions.map(session => `
                                     <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
                                         <div class="bg-gray-50 p-4 border-b">
-                                            <h3 class="font-semibold text-gray-800">${session.date}</h3>
+                                            <h3 class="font-semibold text-gray-800">${formatSessionDate(session)}</h3>
                                         </div>
                                         <div class="p-4 space-y-2">
                                             ${session.records.map(record => `

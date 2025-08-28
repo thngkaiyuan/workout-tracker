@@ -1,0 +1,427 @@
+import { state, daysOfWeek, today } from './state.js';
+import { getTodaysWorkout, getPlanById, getWorkoutSessions } from './helpers.js';
+
+const app = document.getElementById('app');
+
+function createNumberDial(label, value, actionType, fieldType, min = 0) {
+    const increment = 1;
+    return `
+        <div class="bg-white rounded-lg p-4 shadow-sm border">
+            <label class="block text-sm font-medium text-gray-700 mb-2">${label}</label>
+            <div class="flex items-center justify-center space-x-3">
+                <button data-action="${actionType}" data-id="-${increment}" class="w-10 h-10 bg-blue-500 text-white rounded-full flex items-center justify-center text-lg font-bold touch-manipulation active:bg-blue-600">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                </button>
+                <input type="number" data-field="${fieldType}" value="${value}" class="w-20 text-center text-xl font-bold border rounded-lg py-2 px-3" min="${min}">
+                <button data-action="${actionType}" data-id="${increment}" class="w-10 h-10 bg-blue-500 text-white rounded-full flex items-center justify-center text-lg font-bold touch-manipulation active:bg-blue-600">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function renderDashboard() {
+    const todaysWorkout = getTodaysWorkout();
+    return `
+        <div class="gradient-bg text-white p-6 rounded-b-3xl shadow-lg">
+            <h1 class="text-2xl font-bold flex items-center gap-2">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6.5 6.5 11 11"/><path d="m21 21-1-1"/><path d="m3 3 1 1"/><path d="m18 22 4-4"/><path d="m2 6 4-4"/><path d="m3 10 7-7"/><path d="m14 21 7-7"/></svg>
+                Workout Tracker
+            </h1>
+            <p class="text-blue-100 mt-1">Today is ${daysOfWeek[today]}</p>
+        </div>
+
+        <div class="p-4 md:p-6 space-y-4">
+            ${state.savedWorkout ? `
+                <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-r-lg shadow-md mb-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="font-bold">Paused Workout</h3>
+                            <p class="text-sm">You have a workout in progress.</p>
+                        </div>
+                        <button data-action="resume-workout" class="bg-yellow-500 text-white px-4 py-2 rounded-lg font-semibold text-sm touch-manipulation active:bg-yellow-600">Resume</button>
+                    </div>
+                </div>
+            ` : ''}
+            ${todaysWorkout ? `
+                <div class="gradient-green text-white p-6 rounded-2xl shadow-lg">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-lg font-bold">Today's Workout</h2>
+                            <p class="text-green-100 text-sm">${todaysWorkout.name}</p>
+                            <p class="text-green-100 text-xs mt-1">${todaysWorkout.exercises.length} exercises</p>
+                        </div>
+                        <button data-action="start-workout" data-id="${todaysWorkout.id}" class="bg-white text-green-600 px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg touch-manipulation active:bg-gray-50">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5,3 19,12 5,21"></polygon></svg>
+                            Start
+                        </button>
+                    </div>
+                </div>
+            ` : `
+                <div class="bg-white p-6 rounded-2xl text-center border">
+                    <svg width="32" height="32" class="mx-auto mb-2 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <p class="text-gray-600">No workout planned for today.</p>
+                    <button data-action="navigate" data-id="createPlan" class="mt-3 text-sm bg-blue-500 text-white px-4 py-2 rounded-lg">Create a Plan</button>
+                </div>
+            `}
+
+            <div class="space-y-3">
+                <h3 class="text-lg font-semibold text-gray-800 px-2">All Workout Plans</h3>
+                ${state.plans.length > 0 ? state.plans.map(plan => `
+                    <div class="bg-white p-4 rounded-xl shadow-sm border flex items-center justify-between">
+                        <div data-action="view-plan-history" data-id="${plan.id}" class="flex-1 cursor-pointer">
+                            <h4 class="font-semibold text-gray-800">${plan.name}</h4>
+                            <p class="text-sm text-gray-600">${daysOfWeek[plan.dayOfWeek]} • ${plan.exercises.length} exercises</p>
+                        </div>
+                        <button data-action="start-workout" data-id="${plan.id}" class="bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium touch-manipulation active:bg-blue-600 ml-2">
+                            Start
+                        </button>
+                    </div>
+                `).join('') : `<p class="text-center text-gray-500 bg-gray-100 p-4 rounded-lg">No plans created yet.</p>`}
+            </div>
+
+            <button data-action="navigate" data-id="createPlan" class="w-full bg-blue-600 text-white p-4 rounded-xl font-semibold flex items-center justify-center gap-2 touch-manipulation active:bg-blue-700">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add New Plan
+            </button>
+        </div>
+    `;
+}
+
+function renderPlanHistory() {
+    const plan = state.selectedPlan;
+    const sessions = getWorkoutSessions(plan.id);
+
+    const formatSessionDate = (session) => {
+        const { startTime, endTime, isComplete } = session;
+
+        const formatDate = (date) => date.toLocaleDateString([], { month: 'numeric', day: 'numeric', year: 'numeric' });
+        const formatTime = (date) => date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+
+        if (!isComplete) {
+            return `${formatDate(startTime)}, ${formatTime(startTime)} - TBD (Incomplete)`;
+        }
+
+        const onSameDay = startTime.toDateString() === endTime.toDateString();
+        if (onSameDay) {
+            return `${formatDate(startTime)}, ${formatTime(startTime)} - ${formatTime(endTime)}`;
+        }
+
+        return `${formatDate(startTime)}, ${formatTime(startTime)} - ${formatDate(endTime)}, ${formatTime(endTime)}`;
+    };
+
+    return `
+        <div class="gradient-bg text-white p-6 flex items-center gap-3 sticky top-0 shadow-md">
+            <button data-action="navigate" data-id="dashboard" class="touch-manipulation p-2 -ml-2">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12,19 5,12 12,5"/></svg>
+            </button>
+            <div>
+                <h1 class="text-xl font-bold">${plan.name}</h1>
+                <p class="text-blue-100 text-sm">${daysOfWeek[plan.dayOfWeek]} • ${plan.exercises.length} exercises</p>
+            </div>
+        </div>
+
+        <div class="p-4 md:p-6 space-y-6">
+            <!-- Plan Overview Section -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border">
+                <h3 class="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    Plan Overview
+                </h3>
+                <div class="space-y-2">
+                    ${plan.exercises.map(ex => `
+                        <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                            <div>
+                                <p class="font-medium text-gray-800">${ex.name}</p>
+                                <p class="text-sm text-gray-500">${ex.type === 'reps' ? `${ex.sets} sets × ${ex.reps} reps` : `${ex.sets} sets × ${ex.duration}s`}</p>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <!-- Workout History Section -->
+            <div>
+                <h3 class="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 6v6l4 2"/></svg>
+                    Workout History
+                </h3>
+                ${sessions.length === 0 ? `
+                    <div class="bg-white p-6 rounded-xl text-center border mt-2">
+                        <svg width="48" height="48" class="mx-auto mb-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+                        <p class="text-gray-600">No workouts recorded for this plan yet.</p>
+                        <button data-action="start-workout" data-id="${plan.id}" class="mt-4 bg-blue-500 text-white px-5 py-2 rounded-lg font-semibold text-sm">Start First Workout</button>
+                    </div>
+                ` : `
+                    <div class="space-y-4 mt-2">
+                        ${sessions.map(session => `
+                            <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+                                <div class="bg-gray-50 p-4 border-b">
+                                    <h3 class="font-semibold text-gray-800">${formatSessionDate(session)}</h3>
+                                </div>
+                                <div class="p-4 space-y-2">
+                                    ${session.records.map(record => `
+                                        <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                                            <div>
+                                                <p class="font-medium text-gray-800">${record.exercise}</p>
+                                                <p class="text-sm text-gray-500">Set ${record.set}</p>
+                                            </div>
+                                            <div class="text-right">
+                                                <p class="font-semibold text-gray-800">${record.type === 'reps' ? `${record.reps} reps` : `${record.duration}s`}</p>
+                                                ${record.type === 'reps' ? `<p class="text-sm text-gray-500">${record.weight} lbs</p>` : ''}
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `}
+            </div>
+        </div>
+    `;
+}
+
+function renderCreatePlan() {
+    const isEditing = state.editingExerciseId !== null;
+    return `
+        <div class="gradient-bg text-white p-6 flex items-center gap-3">
+            <button data-action="navigate" data-id="dashboard" class="touch-manipulation p-2 -ml-2">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12,19 5,12 12,5"/></svg>
+            </button>
+            <h1 class="text-xl font-bold">Create New Plan</h1>
+        </div>
+        <div class="p-4 md:p-6 space-y-6">
+            <div class="space-y-4 bg-white p-4 rounded-xl border">
+                <div>
+                    <label for="plan-name" class="block text-sm font-medium text-gray-700 mb-1">Plan Name</label>
+                    <input id="plan-name" type="text" data-field="newPlanName" value="${state.newPlan.name}" class="w-full p-3 border rounded-lg" placeholder="e.g., Push Day">
+                </div>
+                <div>
+                    <label for="plan-day" class="block text-sm font-medium text-gray-700 mb-1">Day of Week</label>
+                    <select id="plan-day" data-field="newPlanDay" class="w-full p-3 border rounded-lg bg-white">
+                        ${daysOfWeek.map((day, index) => `<option value="${index}" ${index === state.newPlan.dayOfWeek ? 'selected' : ''}>${day}</option>`).join('')}
+                    </select>
+                </div>
+            </div>
+
+            <div id="add-exercise-form" class="bg-white p-4 rounded-xl shadow-sm border scroll-mt-4">
+                <h3 class="font-semibold text-gray-800 mb-4">${isEditing ? 'Edit Exercise' : 'Add Exercise'}</h3>
+                <div class="space-y-3">
+                    <input type="text" data-field="newExerciseName" value="${state.newExercise.name}" class="w-full p-3 border rounded-lg" placeholder="Exercise name">
+
+                    <div>
+                        <label for="exercise-type" class="block text-sm text-gray-600 mb-1">Exercise Type</label>
+                        <select id="exercise-type" data-field="newExerciseType" class="w-full p-3 border rounded-lg bg-white">
+                            <option value="reps" ${state.newExercise.type === 'reps' ? 'selected' : ''}>Reps & Weight</option>
+                            <option value="time" ${state.newExercise.type === 'time' ? 'selected' : ''}>Time</option>
+                        </select>
+                    </div>
+
+                    <div class="flex gap-3">
+                        <div class="flex-1">
+                            <label for="exercise-sets" class="block text-sm text-gray-600 mb-1">Sets</label>
+                            <input id="exercise-sets" type="number" data-field="newExerciseSets" value="${state.newExercise.sets}" class="w-full p-2 border rounded" min="1">
+                        </div>
+                        ${state.newExercise.type === 'reps' ? `
+                        <div class="flex-1">
+                            <label for="exercise-reps" class="block text-sm text-gray-600 mb-1">Reps</label>
+                            <input id="exercise-reps" type="number" data-field="newExerciseReps" value="${state.newExercise.reps}" class="w-full p-2 border rounded" min="1">
+                        </div>
+                        ` : `
+                        <div class="flex-1">
+                            <label for="exercise-duration" class="block text-sm text-gray-600 mb-1">Duration (s)</label>
+                            <input id="exercise-duration" type="number" data-field="newExerciseDuration" value="${state.newExercise.duration}" class="w-full p-2 border rounded" min="1">
+                        </div>
+                        `}
+                    </div>
+                    <div class="flex gap-2 pt-2">
+                        <button data-action="add-exercise" class="w-full bg-green-500 text-white p-3 rounded-lg font-medium touch-manipulation active:bg-green-600">${isEditing ? 'Update Exercise' : 'Add Exercise'}</button>
+                        ${isEditing ? `
+                            <button data-action="cancel-edit" class="w-full bg-gray-200 text-gray-800 p-3 rounded-lg font-medium touch-manipulation active:bg-gray-300">Cancel</button>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+
+            ${state.newPlan.exercises.length > 0 ? `
+                <div class="bg-white p-4 rounded-xl shadow-sm border">
+                    <h3 class="font-semibold text-gray-800 mb-3">Exercises (${state.newPlan.exercises.length})</h3>
+                    <div class="space-y-2">
+                        ${state.newPlan.exercises.map((ex, index) => `
+                            <div class="flex justify-between items-center p-3 bg-white rounded-lg border border-gray-200 shadow-sm">
+                                <div>
+                                    <p class="font-medium text-gray-800">${ex.name}</p>
+                                    <p class="text-sm text-gray-500">${ex.type === 'reps' ? `${ex.sets} sets × ${ex.reps} reps` : `${ex.sets} sets × ${ex.duration}s`}</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <div class="flex flex-col -space-y-1">
+                                        <button data-action="move-exercise" data-id="${ex.id}" data-direction="up" class="p-1 text-gray-400 hover:text-blue-600 ${index === 0 ? 'opacity-25 cursor-not-allowed' : ''}" ${index === 0 ? 'disabled' : ''}>
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                                        </button>
+                                        <button data-action="move-exercise" data-id="${ex.id}" data-direction="down" class="p-1 text-gray-400 hover:text-blue-600 ${index === state.newPlan.exercises.length - 1 ? 'opacity-25 cursor-not-allowed' : ''}" ${index === state.newPlan.exercises.length - 1 ? 'disabled' : ''}>
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                        </button>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <button data-action="start-edit-exercise" data-id="${ex.id}" class="p-2 text-gray-400 hover:text-blue-600 focus:outline-none touch-manipulation">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z"></path></svg>
+                                        </button>
+                                        <button data-action="delete-exercise" data-id="${ex.id}" class="p-2 text-gray-400 hover:text-red-600 focus:outline-none touch-manipulation">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+
+            <button data-action="save-plan" class="w-full bg-blue-600 text-white p-4 rounded-xl font-semibold touch-manipulation active:bg-blue-700">Save Plan</button>
+        </div>
+    `;
+}
+
+function renderWorkout() {
+    const workout = state.currentWorkout;
+    const currentExercise = workout.exercises[state.currentExerciseIndex];
+    const isReps = currentExercise.type === 'reps';
+
+    // Calculate progress
+    const totalSets = workout.exercises.reduce((sum, ex) => sum + ex.sets, 0);
+    let completedSets = 0;
+    for (let i = 0; i < state.currentExerciseIndex; i++) {
+        completedSets += workout.exercises[i].sets;
+    }
+    completedSets += state.currentSetIndex;
+    const progress = totalSets > 0 ? ((completedSets) / totalSets) * 100 : 0;
+
+    let exerciseUI;
+    if (isReps) {
+        exerciseUI = `
+            <div class="space-y-4">
+                ${createNumberDial('Reps', state.currentReps, 'update-reps', 'currentReps', 1)}
+                ${createNumberDial('Weight (lbs)', state.currentWeight, 'update-weight', 'currentWeight', 0)}
+            </div>
+            <button data-action="complete-set" class="w-full bg-green-600 text-white p-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 touch-manipulation active:bg-green-700">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20,6 9,17 4,12"></polyline>
+                </svg>
+                Complete Set
+            </button>
+        `;
+    } else { // Time-based exercise
+        const recordDuration = state.lastDuration > 0 ? state.lastDuration : currentExercise.duration;
+        const isBeatingRecord = state.elapsedTime > recordDuration;
+        const timerDisplay = state.elapsedTime.toFixed(1) + 's';
+
+        exerciseUI = `
+            <div class="bg-white rounded-lg p-6 shadow-sm border text-center">
+                <p class="text-sm font-medium text-gray-500">Record: ${recordDuration}s</p>
+                <p class="text-6xl font-bold my-4 ${isBeatingRecord ? 'text-green-500' : ''}">${timerDisplay}</p>
+                ${state.timerState === 'idle' && state.lastDuration > 0 ? `<p class="font-semibold text-blue-600 text-lg animate-pulse">BEAT IT!</p>` : ''}
+                ${isBeatingRecord ? `<p class="font-semibold text-green-600 text-lg">NEW RECORD!</p>` : ''}
+            </div>
+            ${state.timerState === 'running'
+                ? `<button data-action="stop-timer" class="w-full bg-red-500 text-white p-4 rounded-xl font-bold text-lg touch-manipulation">Done</button>`
+                : `<button data-action="start-timer" class="w-full bg-green-600 text-white p-4 rounded-xl font-bold text-lg touch-manipulation">Start</button>`
+            }
+        `;
+    }
+
+    return `
+        <div class="gradient-green text-white p-6">
+            <div class="flex items-center justify-between mb-4">
+                <button data-action="navigate" data-id="dashboard" class="touch-manipulation">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="19" y1="12" x2="5" y2="12"></line>
+                        <polyline points="12,19 5,12 12,5"></polyline>
+                    </svg>
+                </button>
+                <h1 class="text-xl font-bold">${workout.name}</h1>
+                <div class="w-6"></div>
+            </div>
+
+            <div class="bg-green-700 rounded-full h-2 mb-2">
+                <div class="bg-white rounded-full h-2 transition-all duration-300" style="width: ${progress}%"></div>
+            </div>
+            <p class="text-green-100 text-sm text-center">${Math.round(progress)}% Complete</p>
+        </div>
+
+        <div class="p-6 space-y-6">
+            <div class="text-center">
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">${currentExercise.name}</h2>
+                <p class="text-gray-600">Set ${state.currentSetIndex + 1} of ${currentExercise.sets}</p>
+            </div>
+
+            ${exerciseUI}
+
+            <div class="flex space-x-2">
+                <button data-action="save-and-exit" class="w-full bg-gray-200 text-gray-800 p-3 rounded-xl font-semibold flex items-center justify-center gap-2 touch-manipulation active:bg-gray-300">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 22H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h5"/><polyline points="17 16 21 12 17 8"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                    Save & Exit
+                </button>
+                <button data-action="finish-early" class="w-full bg-blue-100 text-blue-800 p-3 rounded-xl font-semibold flex items-center justify-center gap-2 touch-manipulation active:bg-blue-200">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    Finish Early
+                </button>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl shadow-sm border">
+                <h3 class="font-semibold text-gray-800 mb-2">Remaining Exercises</h3>
+                <div class="space-y-1 text-sm">
+                    ${workout.exercises.slice(state.currentExerciseIndex).map((exercise, index) => `
+                        <div class="flex justify-between ${index === 0 ? 'text-green-600 font-medium' : 'text-gray-600'}">
+                            <span>${exercise.name}</span>
+                            <span>${exercise.sets} × ${exercise.reps || exercise.duration + 's'}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderWorkoutComplete() {
+    return `
+        <div class="gradient-green text-white p-6 text-center">
+            <div class="w-16 h-16 bg-white rounded-full mx-auto mb-4 flex items-center justify-center shadow-lg">
+                <svg width="32" height="32" class="text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg>
+            </div>
+            <h1 class="text-2xl font-bold mb-2">Workout Complete!</h1>
+            <p class="text-green-100">Great job finishing ${state.currentWorkout.name}.</p>
+        </div>
+        <div class="p-4 md:p-6 space-y-3">
+            <button data-action="navigate" data-id="dashboard" class="w-full bg-blue-600 text-white p-4 rounded-xl font-semibold touch-manipulation active:bg-blue-700">Back to Dashboard</button>
+            <button data-action="start-workout" data-id="${state.currentWorkout.id}" class="w-full bg-gray-200 text-gray-800 p-4 rounded-xl font-semibold flex items-center justify-center gap-2 touch-manipulation active:bg-gray-300">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1,4 1,10 7,10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                Repeat Workout
+            </button>
+        </div>
+    `;
+}
+
+export function render() {
+    const viewMap = {
+        'dashboard': renderDashboard,
+        'createPlan': renderCreatePlan,
+        'planHistory': renderPlanHistory,
+        'workout': renderWorkout,
+        'workoutComplete': renderWorkoutComplete,
+    };
+    const newHtml = (viewMap[state.currentView] || viewMap['dashboard'])();
+
+    app.classList.add('fade-out');
+    setTimeout(() => {
+        app.innerHTML = newHtml;
+        app.classList.remove('fade-out');
+        app.classList.add('fade-in');
+    }, 150);
+}

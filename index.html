@@ -65,6 +65,7 @@
             currentWorkout: null,
             currentExerciseIndex: 0,
             currentSetIndex: 0,
+            savedWorkout: null, // Holds the state of a paused workout
             // Reps-based exercise state
             currentReps: 0,
             currentWeight: 0,
@@ -94,11 +95,19 @@
             
             const savedHistory = safeGetItem('workoutHistory');
             if (savedHistory) state.workoutHistory = JSON.parse(savedHistory);
+
+            const savedWorkout = safeGetItem('savedWorkout');
+            if (savedWorkout) state.savedWorkout = JSON.parse(savedWorkout);
         }
 
         function saveData() {
             safeSetItem('workoutPlans', JSON.stringify(state.plans));
             safeSetItem('workoutHistory', JSON.stringify(state.workoutHistory));
+            if (state.savedWorkout) {
+                safeSetItem('savedWorkout', JSON.stringify(state.savedWorkout));
+            } else {
+                try { localStorage.removeItem('savedWorkout'); } catch (e) { console.warn(e); }
+            }
         }
 
         // --- Business Logic & Helpers ---
@@ -171,6 +180,60 @@
                 state.elapsedTime = 0;
                 state.timerState = 'idle';
             }
+
+            // Clear any previously saved workout when starting a new one
+            state.savedWorkout = null;
+            saveData();
+
+            navigate('workout');
+        }
+
+        function saveAndExitWorkout() {
+            state.savedWorkout = {
+                planId: state.currentWorkout.id,
+                exerciseIndex: state.currentExerciseIndex,
+                setIndex: state.currentSetIndex,
+            };
+            saveData();
+            state.currentWorkout = null; // Exit the workout state
+            navigate('dashboard');
+        }
+
+        function finishWorkoutEarly() {
+            state.savedWorkout = null; // Clear any paused state
+            saveData();
+            navigate('workoutComplete');
+        }
+
+        function resumeWorkout() {
+            if (!state.savedWorkout) return;
+
+            const { planId, exerciseIndex, setIndex } = state.savedWorkout;
+            const plan = getPlanById(planId);
+            if (!plan) {
+                // The plan might have been deleted. Clear the saved state.
+                state.savedWorkout = null;
+                saveData();
+                render();
+                return;
+            }
+
+            state.currentWorkout = plan;
+            state.currentExerciseIndex = exerciseIndex;
+            state.currentSetIndex = setIndex;
+
+            const currentExercise = plan.exercises[exerciseIndex];
+            if (currentExercise.type === 'reps') {
+                state.currentReps = currentExercise.reps;
+                state.currentWeight = getLastWeight(currentExercise.name);
+            } else {
+                state.lastDuration = getLastDuration(currentExercise.name);
+                state.elapsedTime = 0;
+                state.timerState = 'idle';
+            }
+
+            state.savedWorkout = null;
+            saveData();
             navigate('workout');
         }
 
@@ -334,6 +397,7 @@
             const actions = {
                 'navigate': () => navigate(id),
                 'start-workout': () => startWorkout(parseInt(id)),
+                'resume-workout': resumeWorkout,
                 'view-plan-history': () => viewPlanHistory(parseInt(id)),
                 'complete-set': completeSet,
                 'start-timer': startTimer,
@@ -344,6 +408,8 @@
                 'move-exercise': () => moveExercise(parseInt(id), direction),
                 'start-edit-exercise': () => startEditExercise(parseInt(id)),
                 'cancel-edit': cancelEdit,
+                'save-and-exit': saveAndExitWorkout,
+                'finish-early': finishWorkoutEarly,
                 'update-reps': () => {
                     state.currentReps = Math.max(0, state.currentReps + parseInt(id));
                     render();
@@ -390,6 +456,17 @@
                 </div>
 
                 <div class="p-4 md:p-6 space-y-4">
+                    ${state.savedWorkout ? `
+                        <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-r-lg shadow-md mb-4">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <h3 class="font-bold">Paused Workout</h3>
+                                    <p class="text-sm">You have a workout in progress.</p>
+                                </div>
+                                <button data-action="resume-workout" class="bg-yellow-500 text-white px-4 py-2 rounded-lg font-semibold text-sm touch-manipulation active:bg-yellow-600">Resume</button>
+                            </div>
+                        </div>
+                    ` : ''}
                     ${todaysWorkout ? `
                         <div class="gradient-green text-white p-6 rounded-2xl shadow-lg">
                             <div class="flex items-center justify-between">
@@ -648,12 +725,15 @@
 
             return `
                 <div class="gradient-green text-white p-6 sticky top-0 shadow-md">
-                    <div class="flex items-center justify-between mb-4">
-                        <button data-action="navigate" data-id="dashboard" class="touch-manipulation p-2 -ml-2"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12,19 5,12 12,5"/></svg></button>
+                    <div class="flex items-center justify-between">
                         <h1 class="text-xl font-bold">${state.currentWorkout.name}</h1>
-                        <div class="w-10"></div>
+                        <div class="flex gap-2">
+                           <button data-action="save-and-exit" class="text-sm font-medium bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg touch-manipulation">Save & Exit</button>
+                           <button data-action="finish-early" class="text-sm font-medium bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg touch-manipulation">Finish Early</button>
+                        </div>
                     </div>
                 </div>
+
                 <div class="p-4 md:p-6 space-y-6">
                     <div class="text-center">
                         <h2 class="text-2xl font-bold text-gray-800 mb-1">${currentExercise.name}</h2>

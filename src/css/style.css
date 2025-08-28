@@ -1,0 +1,20 @@
+/* Prevents double-tap to zoom on buttons, improving responsiveness */
+.touch-manipulation {
+    touch-action: manipulation;
+}
+/* Custom gradient styles for headers and cards */
+.gradient-bg {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+}
+.gradient-green {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+/* Simple transition for view changes */
+#app.fade-out {
+    opacity: 0;
+    transition: opacity 0.15s ease-out;
+}
+#app.fade-in {
+    opacity: 1;
+    transition: opacity 0.15s ease-in;
+}

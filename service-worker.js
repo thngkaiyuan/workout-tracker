@@ -3,7 +3,15 @@ const CACHE_NAME = 'workout-tracker-v1';
 // List of files to cache
 const urlsToCache = [
   '/',
-  '/index.html', // Make sure this matches your HTML file name
+  '/index.html',
+  '/src/css/style.css',
+  '/src/js/main.js',
+  '/src/js/state.js',
+  '/src/js/db.js',
+  '/src/js/ui.js',
+  '/src/js/handlers.js',
+  '/src/js/helpers.js',
+  '/src/js/pwa.js',
   'https://cdn.tailwindcss.com'
 ];
 

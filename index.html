@@ -75,6 +75,7 @@
             lastDuration: 0, // The record to beat
             // Other state
             selectedPlan: null,
+            editingExerciseId: null, // ID of the exercise being edited in the new plan
             newPlan: {
                 name: '',
                 dayOfWeek: today,
@@ -250,12 +251,49 @@
             render();
         }
 
-        function addExerciseToNewPlan() {
-            if (state.newExercise.name) {
+        function saveOrUpdateExercise() {
+            if (!state.newExercise.name) return;
+
+            if (state.editingExerciseId !== null) {
+                // Update existing exercise
+                const index = state.newPlan.exercises.findIndex(ex => ex.id === state.editingExerciseId);
+                if (index !== -1) {
+                    state.newPlan.exercises[index] = { ...state.newExercise, id: state.editingExerciseId };
+                }
+            } else {
+                // Add new exercise
                 state.newPlan.exercises.push({ ...state.newExercise, id: Date.now() });
-                state.newExercise = { name: '', type: 'reps', sets: 3, reps: 10, duration: 60 };
+            }
+
+            // Reset form and editing state
+            state.editingExerciseId = null;
+            state.newExercise = { name: '', type: 'reps', sets: 3, reps: 10, duration: 60 };
+            render();
+        }
+
+        function deleteExercise(exerciseId) {
+            state.newPlan.exercises = state.newPlan.exercises.filter(ex => ex.id !== exerciseId);
+            // If the deleted exercise was being edited, cancel the edit mode.
+            if (state.editingExerciseId === exerciseId) {
+                cancelEdit();
+            } else {
                 render();
             }
+        }
+        function startEditExercise(exerciseId) {
+            const exerciseToEdit = state.newPlan.exercises.find(ex => ex.id === exerciseId);
+            if (exerciseToEdit) {
+                state.editingExerciseId = exerciseId;
+                state.newExercise = { ...exerciseToEdit };
+                render();
+                // Scroll the form into view for a better user experience
+                app.querySelector('#add-exercise-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+        function cancelEdit() {
+            state.editingExerciseId = null;
+            state.newExercise = { name: '', type: 'reps', sets: 3, reps: 10, duration: 60 };
+            render();
         }
         
         function saveNewPlan() {
@@ -265,6 +303,61 @@
                 saveData();
                 navigate('dashboard');
             }
+        }
+
+        // --- Drag and Drop Handlers ---
+        let draggedItemId = null;
+
+        function handleDragStart(e) {
+            const exerciseItem = e.target.closest('[data-exercise-id]');
+            if (!exerciseItem) { e.preventDefault(); return; }
+
+            draggedItemId = parseInt(exerciseItem.dataset.exerciseId);
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', draggedItemId); // Required for Firefox
+
+            // Add a visual cue for the item being dragged
+            setTimeout(() => {
+                exerciseItem.classList.add('opacity-50');
+            }, 0);
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault(); // This is crucial to allow dropping
+            const targetItem = e.target.closest('[data-exercise-id]');
+
+            // Remove previous hover effects
+            const allItems = app.querySelectorAll('[data-exercise-id]');
+            allItems.forEach(item => item.classList.remove('border-t-2', 'border-blue-500'));
+
+            if (targetItem && parseInt(targetItem.dataset.exerciseId) !== draggedItemId) {
+                targetItem.classList.add('border-t-2', 'border-blue-500');
+            }
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            const dropTarget = e.target.closest('[data-exercise-id]');
+            if (!dropTarget || !draggedItemId) return;
+
+            const droppedOnItemId = parseInt(dropTarget.dataset.exerciseId);
+            if (droppedOnItemId === draggedItemId) return;
+
+            const fromIndex = state.newPlan.exercises.findIndex(ex => ex.id === draggedItemId);
+            const toIndex = state.newPlan.exercises.findIndex(ex => ex.id === droppedOnItemId);
+
+            if (fromIndex !== -1 && toIndex !== -1) {
+                const exercises = state.newPlan.exercises;
+                const [draggedItem] = exercises.splice(fromIndex, 1);
+                exercises.splice(toIndex, 0, draggedItem);
+            }
+        }
+
+        function handleDragEnd(e) {
+            // The dragend event is always fired, whether the drop was successful or not.
+            // We use it to clean up the UI and re-render the list in its final state.
+            draggedItemId = null;
+            render();
         }
 
         // --- Event Delegation ---
@@ -280,8 +373,11 @@
                 'complete-set': completeSet,
                 'start-timer': startTimer,
                 'stop-timer': stopTimer,
-                'add-exercise': addExerciseToNewPlan,
+                'add-exercise': saveOrUpdateExercise,
                 'save-plan': saveNewPlan,
+                'delete-exercise': () => deleteExercise(parseInt(id)),
+                'start-edit-exercise': () => startEditExercise(parseInt(id)),
+                'cancel-edit': cancelEdit,
                 'update-reps': () => {
                     state.currentReps = Math.max(0, state.currentRps + parseInt(id));
                     render();
@@ -295,6 +391,11 @@
             if (actions[action]) actions[action]();
         });
         
+        app.addEventListener('dragstart', handleDragStart);
+        app.addEventListener('dragover', handleDragOver);
+        app.addEventListener('drop', handleDrop);
+        app.addEventListener('dragend', handleDragEnd);
+
         app.addEventListener('input', e => {
             const { field } = e.target.dataset;
             const value = e.target.type === 'number' ? parseInt(e.target.value) || 0 : e.target.value;
@@ -419,7 +520,7 @@
         }
 
         function renderCreatePlan() {
-            const isReps = state.newExercise.type === 'reps';
+            const isEditing = state.editingExerciseId !== null;
             return `
                 <div class="gradient-bg text-white p-6 flex items-center gap-3">
                     <button data-action="navigate" data-id="dashboard" class="touch-manipulation p-2 -ml-2">
@@ -430,48 +531,53 @@
                 <div class="p-4 md:p-6 space-y-6">
                     <div class="space-y-4 bg-white p-4 rounded-xl border">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Plan Name</label>
-                            <input type="text" data-field="newPlanName" value="${state.newPlan.name}" class="w-full p-3 border rounded-lg" placeholder="e.g., Push Day">
+                            <label for="plan-name" class="block text-sm font-medium text-gray-700 mb-1">Plan Name</label>
+                            <input id="plan-name" type="text" data-field="newPlanName" value="${state.newPlan.name}" class="w-full p-3 border rounded-lg" placeholder="e.g., Push Day">
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Day of Week</label>
-                            <select data-field="newPlanDay" class="w-full p-3 border rounded-lg bg-white">
+                            <label for="plan-day" class="block text-sm font-medium text-gray-700 mb-1">Day of Week</label>
+                            <select id="plan-day" data-field="newPlanDay" class="w-full p-3 border rounded-lg bg-white">
                                 ${daysOfWeek.map((day, index) => `<option value="${index}" ${index === state.newPlan.dayOfWeek ? 'selected' : ''}>${day}</option>`).join('')}
                             </select>
                         </div>
                     </div>
 
-                    <div class="bg-white p-4 rounded-xl shadow-sm border">
-                        <h3 class="font-semibold text-gray-800 mb-4">Add Exercise</h3>
+                    <div id="add-exercise-form" class="bg-white p-4 rounded-xl shadow-sm border scroll-mt-4">
+                        <h3 class="font-semibold text-gray-800 mb-4">${isEditing ? 'Edit Exercise' : 'Add Exercise'}</h3>
                         <div class="space-y-3">
                             <input type="text" data-field="newExerciseName" value="${state.newExercise.name}" class="w-full p-3 border rounded-lg" placeholder="Exercise name">
                             
                             <div>
-                                <label class="block text-sm text-gray-600 mb-1">Exercise Type</label>
-                                <select data-field="newExerciseType" class="w-full p-3 border rounded-lg bg-white">
-                                    <option value="reps" ${isReps ? 'selected' : ''}>Reps & Weight</option>
-                                    <option value="time" ${!isReps ? 'selected' : ''}>Time</option>
+                                <label for="exercise-type" class="block text-sm text-gray-600 mb-1">Exercise Type</label>
+                                <select id="exercise-type" data-field="newExerciseType" class="w-full p-3 border rounded-lg bg-white">
+                                    <option value="reps" ${state.newExercise.type === 'reps' ? 'selected' : ''}>Reps & Weight</option>
+                                    <option value="time" ${state.newExercise.type === 'time' ? 'selected' : ''}>Time</option>
                                 </select>
                             </div>
 
                             <div class="flex gap-3">
                                 <div class="flex-1">
-                                    <label class="block text-sm text-gray-600 mb-1">Sets</label>
-                                    <input type="number" data-field="newExerciseSets" value="${state.newExercise.sets}" class="w-full p-2 border rounded" min="1">
+                                    <label for="exercise-sets" class="block text-sm text-gray-600 mb-1">Sets</label>
+                                    <input id="exercise-sets" type="number" data-field="newExerciseSets" value="${state.newExercise.sets}" class="w-full p-2 border rounded" min="1">
                                 </div>
-                                ${isReps ? `
+                                ${state.newExercise.type === 'reps' ? `
                                 <div class="flex-1">
-                                    <label class="block text-sm text-gray-600 mb-1">Reps</label>
-                                    <input type="number" data-field="newExerciseReps" value="${state.newExercise.reps}" class="w-full p-2 border rounded" min="1">
+                                    <label for="exercise-reps" class="block text-sm text-gray-600 mb-1">Reps</label>
+                                    <input id="exercise-reps" type="number" data-field="newExerciseReps" value="${state.newExercise.reps}" class="w-full p-2 border rounded" min="1">
                                 </div>
                                 ` : `
                                 <div class="flex-1">
-                                    <label class="block text-sm text-gray-600 mb-1">Duration (s)</label>
-                                    <input type="number" data-field="newExerciseDuration" value="${state.newExercise.duration}" class="w-full p-2 border rounded" min="1">
+                                    <label for="exercise-duration" class="block text-sm text-gray-600 mb-1">Duration (s)</label>
+                                    <input id="exercise-duration" type="number" data-field="newExerciseDuration" value="${state.newExercise.duration}" class="w-full p-2 border rounded" min="1">
                                 </div>
                                 `}
                             </div>
-                            <button data-action="add-exercise" class="w-full bg-green-500 text-white p-2 rounded-lg font-medium touch-manipulation active:bg-green-600">Add Exercise</button>
+                            <div class="flex gap-2 pt-2">
+                                <button data-action="add-exercise" class="w-full bg-green-500 text-white p-3 rounded-lg font-medium touch-manipulation active:bg-green-600">${isEditing ? 'Update Exercise' : 'Add Exercise'}</button>
+                                ${isEditing ? `
+                                    <button data-action="cancel-edit" class="w-full bg-gray-200 text-gray-800 p-3 rounded-lg font-medium touch-manipulation active:bg-gray-300">Cancel</button>
+                                ` : ''}
+                            </div>
                         </div>
                     </div>
                     
@@ -480,10 +586,21 @@
                             <h3 class="font-semibold text-gray-800 mb-3">Exercises (${state.newPlan.exercises.length})</h3>
                             <div class="space-y-2">
                                 ${state.newPlan.exercises.map(ex => `
-                                    <div class="flex justify-between items-center p-2 bg-gray-50 rounded">
-                                        <div>
-                                            <span class="font-medium">${ex.name}</span>
-                                            <span class="text-sm text-gray-600 ml-2">${ex.type === 'reps' ? `${ex.sets} × ${ex.reps}` : `${ex.sets} × ${ex.duration}s`}</span>
+                                    <div draggable="true" data-exercise-id="${ex.id}" class="flex justify-between items-center p-3 bg-white rounded-lg border border-gray-200 cursor-move touch-manipulation transition-shadow duration-150 shadow-sm hover:shadow-md">
+                                        <div class="flex items-center gap-3">
+                                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                                            <div>
+                                                <p class="font-medium text-gray-800">${ex.name}</p>
+                                                <p class="text-sm text-gray-500">${ex.type === 'reps' ? `${ex.sets} sets × ${ex.reps} reps` : `${ex.sets} sets × ${ex.duration}s`}</p>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <button data-action="start-edit-exercise" data-id="${ex.id}" class="p-2 text-gray-400 hover:text-blue-600 focus:outline-none touch-manipulation">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z"></path></svg>
+                                            </button>
+                                            <button data-action="delete-exercise" data-id="${ex.id}" class="p-2 text-gray-400 hover:text-red-600 focus:outline-none touch-manipulation">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                            </button>
                                         </div>
                                     </div>
                                 `).join('')}

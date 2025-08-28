@@ -295,6 +295,21 @@
             state.newExercise = { name: '', type: 'reps', sets: 3, reps: 10, duration: 60 };
             render();
         }
+
+        function moveExercise(exerciseId, direction) {
+            const exercises = state.newPlan.exercises;
+            const index = exercises.findIndex(ex => ex.id === exerciseId);
+
+            if (index === -1) return;
+
+            if (direction === 'up' && index > 0) {
+                [exercises[index - 1], exercises[index]] = [exercises[index], exercises[index - 1]];
+            } else if (direction === 'down' && index < exercises.length - 1) {
+                [exercises[index + 1], exercises[index]] = [exercises[index], exercises[index + 1]];
+            }
+
+            render();
+        }
         
         function saveNewPlan() {
             if (state.newPlan.name && state.newPlan.exercises.length > 0) {
@@ -305,66 +320,12 @@
             }
         }
 
-        // --- Drag and Drop Handlers ---
-        let draggedItemId = null;
-
-        function handleDragStart(e) {
-            const exerciseItem = e.target.closest('[data-exercise-id]');
-            if (!exerciseItem) { e.preventDefault(); return; }
-
-            draggedItemId = parseInt(exerciseItem.dataset.exerciseId);
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', draggedItemId); // Required for Firefox
-
-            // Add a visual cue for the item being dragged
-            setTimeout(() => {
-                exerciseItem.classList.add('opacity-50');
-            }, 0);
-        }
-
-        function handleDragOver(e) {
-            e.preventDefault(); // This is crucial to allow dropping
-            const targetItem = e.target.closest('[data-exercise-id]');
-
-            // Remove previous hover effects
-            const allItems = app.querySelectorAll('[data-exercise-id]');
-            allItems.forEach(item => item.classList.remove('border-t-2', 'border-blue-500'));
-
-            if (targetItem && parseInt(targetItem.dataset.exerciseId) !== draggedItemId) {
-                targetItem.classList.add('border-t-2', 'border-blue-500');
-            }
-        }
-
-        function handleDrop(e) {
-            e.preventDefault();
-            const dropTarget = e.target.closest('[data-exercise-id]');
-            if (!dropTarget || !draggedItemId) return;
-
-            const droppedOnItemId = parseInt(dropTarget.dataset.exerciseId);
-            if (droppedOnItemId === draggedItemId) return;
-
-            const fromIndex = state.newPlan.exercises.findIndex(ex => ex.id === draggedItemId);
-            const toIndex = state.newPlan.exercises.findIndex(ex => ex.id === droppedOnItemId);
-
-            if (fromIndex !== -1 && toIndex !== -1) {
-                const exercises = state.newPlan.exercises;
-                const [draggedItem] = exercises.splice(fromIndex, 1);
-                exercises.splice(toIndex, 0, draggedItem);
-            }
-        }
-
-        function handleDragEnd(e) {
-            // The dragend event is always fired, whether the drop was successful or not.
-            // We use it to clean up the UI and re-render the list in its final state.
-            draggedItemId = null;
-            render();
-        }
 
         // --- Event Delegation ---
         app.addEventListener('click', e => {
             const target = e.target.closest('[data-action]');
             if (!target) return;
-            const { action, id } = target.dataset;
+            const { action, id, direction } = target.dataset;
 
             const actions = {
                 'navigate': () => navigate(id),
@@ -376,6 +337,7 @@
                 'add-exercise': saveOrUpdateExercise,
                 'save-plan': saveNewPlan,
                 'delete-exercise': () => deleteExercise(parseInt(id)),
+                'move-exercise': () => moveExercise(parseInt(id), direction),
                 'start-edit-exercise': () => startEditExercise(parseInt(id)),
                 'cancel-edit': cancelEdit,
                 'update-reps': () => {
@@ -391,11 +353,6 @@
             if (actions[action]) actions[action]();
         });
         
-        app.addEventListener('dragstart', handleDragStart);
-        app.addEventListener('dragover', handleDragOver);
-        app.addEventListener('drop', handleDrop);
-        app.addEventListener('dragend', handleDragEnd);
-
         app.addEventListener('input', e => {
             const { field } = e.target.dataset;
             const value = e.target.type === 'number' ? parseInt(e.target.value) || 0 : e.target.value;
@@ -585,22 +542,29 @@
                         <div class="bg-white p-4 rounded-xl shadow-sm border">
                             <h3 class="font-semibold text-gray-800 mb-3">Exercises (${state.newPlan.exercises.length})</h3>
                             <div class="space-y-2">
-                                ${state.newPlan.exercises.map(ex => `
-                                    <div draggable="true" data-exercise-id="${ex.id}" class="flex justify-between items-center p-3 bg-white rounded-lg border border-gray-200 cursor-move touch-manipulation transition-shadow duration-150 shadow-sm hover:shadow-md">
-                                        <div class="flex items-center gap-3">
-                                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-                                            <div>
-                                                <p class="font-medium text-gray-800">${ex.name}</p>
-                                                <p class="text-sm text-gray-500">${ex.type === 'reps' ? `${ex.sets} sets × ${ex.reps} reps` : `${ex.sets} sets × ${ex.duration}s`}</p>
-                                            </div>
+                                ${state.newPlan.exercises.map((ex, index) => `
+                                    <div class="flex justify-between items-center p-3 bg-white rounded-lg border border-gray-200 shadow-sm">
+                                        <div>
+                                            <p class="font-medium text-gray-800">${ex.name}</p>
+                                            <p class="text-sm text-gray-500">${ex.type === 'reps' ? `${ex.sets} sets × ${ex.reps} reps` : `${ex.sets} sets × ${ex.duration}s`}</p>
                                         </div>
-                                        <div class="flex items-center gap-1">
-                                            <button data-action="start-edit-exercise" data-id="${ex.id}" class="p-2 text-gray-400 hover:text-blue-600 focus:outline-none touch-manipulation">
-                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z"></path></svg>
-                                            </button>
-                                            <button data-action="delete-exercise" data-id="${ex.id}" class="p-2 text-gray-400 hover:text-red-600 focus:outline-none touch-manipulation">
-                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                            </button>
+                                        <div class="flex items-center gap-2">
+                                            <div class="flex flex-col -space-y-1">
+                                                <button data-action="move-exercise" data-id="${ex.id}" data-direction="up" class="p-1 text-gray-400 hover:text-blue-600 ${index === 0 ? 'opacity-25 cursor-not-allowed' : ''}" ${index === 0 ? 'disabled' : ''}>
+                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                                                </button>
+                                                <button data-action="move-exercise" data-id="${ex.id}" data-direction="down" class="p-1 text-gray-400 hover:text-blue-600 ${index === state.newPlan.exercises.length - 1 ? 'opacity-25 cursor-not-allowed' : ''}" ${index === state.newPlan.exercises.length - 1 ? 'disabled' : ''}>
+                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                                </button>
+                                            </div>
+                                            <div class="flex items-center gap-1">
+                                                <button data-action="start-edit-exercise" data-id="${ex.id}" class="p-2 text-gray-400 hover:text-blue-600 focus:outline-none touch-manipulation">
+                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z"></path></svg>
+                                                </button>
+                                                <button data-action="delete-exercise" data-id="${ex.id}" class="p-2 text-gray-400 hover:text-red-600 focus:outline-none touch-manipulation">
+                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 `).join('')}

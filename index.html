@@ -119,6 +119,11 @@
             return record ? record.weight : 0;
         }
 
+        function getLastReps(exerciseName) {
+            const record = state.workoutHistory.slice().reverse().find(r => r.exercise === exerciseName && r.type === 'reps');
+            return record ? record.reps : null;
+        }
+
         function getLastDuration(exerciseName) {
             const record = state.workoutHistory.slice().reverse().find(r => r.exercise === exerciseName && r.type === 'time');
             return record ? record.duration : 0;
@@ -173,7 +178,8 @@
             
             const firstExercise = plan.exercises[0];
             if (firstExercise.type === 'reps') {
-                state.currentReps = firstExercise.reps;
+                const lastReps = getLastReps(firstExercise.name);
+                state.currentReps = lastReps !== null ? lastReps : firstExercise.reps;
                 state.currentWeight = getLastWeight(firstExercise.name);
             } else {
                 state.lastDuration = getLastDuration(firstExercise.name);
@@ -309,7 +315,8 @@
 
             const nextExercise = workout.exercises[state.currentExerciseIndex];
             if (nextExercise.type === 'reps') {
-                state.currentReps = nextExercise.reps;
+                const lastReps = getLastReps(nextExercise.name);
+                state.currentReps = lastReps !== null ? lastReps : nextExercise.reps;
                 state.currentWeight = getLastWeight(nextExercise.name);
             } else {
                 state.lastDuration = getLastDuration(nextExercise.name);

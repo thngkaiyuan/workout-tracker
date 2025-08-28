@@ -65,6 +65,7 @@
             currentWorkout: null,
             currentExerciseIndex: 0,
             currentSetIndex: 0,
+            currentSessionId: null,
             savedWorkout: null, // Holds the state of a paused workout
             // Reps-based exercise state
             currentReps: 0,
@@ -133,11 +134,14 @@
             const sessions = state.workoutHistory
                 .filter(record => record.planId === planId)
                 .reduce((acc, record) => {
-                    const dateKey = new Date(record.date).toLocaleDateString();
-                    if (!acc[dateKey]) {
-                        acc[dateKey] = { date: dateKey, records: [] };
+                    const sessionId = record.sessionId || new Date(record.date).toLocaleDateString();
+                    if (!acc[sessionId]) {
+                        acc[sessionId] = {
+                            date: new Date(record.date).toLocaleString(),
+                            records: []
+                        };
                     }
-                    acc[dateKey].records.push(record);
+                    acc[sessionId].records.push(record);
                     return acc;
                 }, {});
 
@@ -193,6 +197,7 @@
             state.currentWorkout = plan;
             state.currentExerciseIndex = 0;
             state.currentSetIndex = 0;
+            state.currentSessionId = Date.now();
             
             const firstExercise = plan.exercises[0];
             if (firstExercise.type === 'reps') {
@@ -279,6 +284,7 @@
                 reps: state.currentReps,
                 weight: state.currentWeight,
                 planId: state.currentWorkout.id,
+                sessionId: state.currentSessionId,
                 type: 'reps'
             });
             saveData();
@@ -311,6 +317,7 @@
                 set: state.currentSetIndex + 1,
                 duration: finalDuration,
                 planId: state.currentWorkout.id,
+                sessionId: state.currentSessionId,
                 type: 'time'
             });
             saveData();

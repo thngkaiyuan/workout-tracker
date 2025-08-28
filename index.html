@@ -58,47 +58,35 @@
         const today = new Date().getDay();
 
         // --- Application State ---
-        // A single source of truth for the entire application's data.
         let state = {
-            currentView: 'dashboard', // dashboard, createPlan, workout, workoutComplete, planHistory
+            currentView: 'dashboard',
             plans: [],
             workoutHistory: [],
             currentWorkout: null,
             currentExerciseIndex: 0,
             currentSetIndex: 0,
+            // Reps-based exercise state
             currentReps: 0,
             currentWeight: 0,
+            // Time-based exercise state
+            timerState: 'idle', // idle, running
+            elapsedTime: 0, // The actual time elapsed in seconds
+            timerInterval: null,
+            lastDuration: 0, // The record to beat
+            // Other state
             selectedPlan: null,
-            // State for the plan creation form
             newPlan: {
                 name: '',
                 dayOfWeek: today,
                 exercises: []
             },
-            // State for the new exercise form within the plan creation view
-            newExercise: { name: '', sets: 3, reps: 10 }
+            newExercise: { name: '', type: 'reps', sets: 3, reps: 10, duration: 60 }
         };
 
         // --- Data Persistence ---
-        // Safely interact with localStorage, handling potential errors.
-        function safeGetItem(key) {
-            try {
-                return localStorage.getItem(key);
-            } catch (error) {
-                console.warn('localStorage not available:', error);
-                return null;
-            }
-        }
+        function safeGetItem(key) { try { return localStorage.getItem(key); } catch (e) { console.warn(e); return null; } }
+        function safeSetItem(key, value) { try { localStorage.setItem(key, value); } catch (e) { console.warn(e); } }
 
-        function safeSetItem(key, value) {
-            try {
-                localStorage.setItem(key, value);
-            } catch (error) {
-                console.warn('localStorage not available:', error);
-            }
-        }
-
-        // Load data from localStorage into the state object on startup.
         function loadData() {
             const savedPlans = safeGetItem('workoutPlans');
             if (savedPlans) state.plans = JSON.parse(savedPlans);
@@ -107,7 +95,6 @@
             if (savedHistory) state.workoutHistory = JSON.parse(savedHistory);
         }
 
-        // Save the current state to localStorage.
         function saveData() {
             safeSetItem('workoutPlans', JSON.stringify(state.plans));
             safeSetItem('workoutHistory', JSON.stringify(state.workoutHistory));
@@ -117,16 +104,16 @@
         const getTodaysWorkout = () => state.plans.find(plan => plan.dayOfWeek === today);
         const getPlanById = (id) => state.plans.find(p => p.id === id);
 
-        // Finds the last recorded weight for a given exercise.
         function getLastWeight(exerciseName) {
-            const lastRecord = state.workoutHistory
-                .slice() // Create a copy to avoid mutating the original array
-                .reverse()
-                .find(record => record.exercise === exerciseName);
-            return lastRecord ? lastRecord.weight : 0;
+            const record = state.workoutHistory.slice().reverse().find(r => r.exercise === exerciseName && r.type === 'reps');
+            return record ? record.weight : 0;
+        }
+
+        function getLastDuration(exerciseName) {
+            const record = state.workoutHistory.slice().reverse().find(r => r.exercise === exerciseName && r.type === 'time');
+            return record ? record.duration : 0;
         }
         
-        // Groups workout history by date for a specific plan.
         function getWorkoutSessions(planName) {
             const sessions = state.workoutHistory
                 .filter(record => record.planName === planName)
@@ -153,23 +140,32 @@
         }
 
         // --- State Changers & Actions ---
-        // These functions modify the state and trigger a re-render.
-        
         function navigate(view) {
+            if (state.currentView === 'workout' && state.timerInterval) {
+                clearInterval(state.timerInterval);
+                state.timerInterval = null;
+            }
             state.currentView = view;
             render();
         }
 
         function startWorkout(planId) {
             const plan = getPlanById(planId);
-            if (!plan) return;
+            if (!plan || plan.exercises.length === 0) return;
             
             state.currentWorkout = plan;
             state.currentExerciseIndex = 0;
             state.currentSetIndex = 0;
+            
             const firstExercise = plan.exercises[0];
-            state.currentReps = firstExercise.reps;
-            state.currentWeight = getLastWeight(firstExercise.name);
+            if (firstExercise.type === 'reps') {
+                state.currentReps = firstExercise.reps;
+                state.currentWeight = getLastWeight(firstExercise.name);
+            } else {
+                state.lastDuration = getLastDuration(firstExercise.name);
+                state.elapsedTime = 0;
+                state.timerState = 'idle';
+            }
             navigate('workout');
         }
 
@@ -181,14 +177,6 @@
             navigate('planHistory');
         }
         
-        function deletePlan(planId) {
-            if (confirm('Are you sure you want to delete this plan?')) {
-                state.plans = state.plans.filter(p => p.id !== planId);
-                saveData();
-                render();
-            }
-        }
-
         function completeSet() {
             const currentExercise = state.currentWorkout.exercises[state.currentExerciseIndex];
             
@@ -198,21 +186,66 @@
                 set: state.currentSetIndex + 1,
                 reps: state.currentReps,
                 weight: state.currentWeight,
-                planName: state.currentWorkout.name
+                planName: state.currentWorkout.name,
+                type: 'reps'
             });
             saveData();
+            moveToNext();
+        }
+
+        function startTimer() {
+            state.timerState = 'running';
+            const startTime = Date.now();
+
+            state.timerInterval = setInterval(() => {
+                const elapsedSeconds = (Date.now() - startTime) / 1000;
+                state.elapsedTime = elapsedSeconds;
+                render(); 
+            }, 100); // Update frequently for smooth decimal display
+            render();
+        }
+
+        function stopTimer() {
+            clearInterval(state.timerInterval);
+            state.timerInterval = null;
+            state.timerState = 'idle';
+
+            const currentExercise = state.currentWorkout.exercises[state.currentExerciseIndex];
+            const finalDuration = parseFloat(state.elapsedTime.toFixed(1)); // Save the final elapsed time
+
+            state.workoutHistory.push({
+                date: new Date().toISOString(),
+                exercise: currentExercise.name,
+                set: state.currentSetIndex + 1,
+                duration: finalDuration,
+                planName: state.currentWorkout.name,
+                type: 'time'
+            });
+            saveData();
+            moveToNext();
+        }
+        
+        function moveToNext() {
+            const workout = state.currentWorkout;
+            const currentExercise = workout.exercises[state.currentExerciseIndex];
 
             if (state.currentSetIndex < currentExercise.sets - 1) {
                 state.currentSetIndex++;
-            } else if (state.currentExerciseIndex < state.currentWorkout.exercises.length - 1) {
+            } else if (state.currentExerciseIndex < workout.exercises.length - 1) {
                 state.currentExerciseIndex++;
                 state.currentSetIndex = 0;
-                const nextExercise = state.currentWorkout.exercises[state.currentExerciseIndex];
-                state.currentReps = nextExercise.reps;
-                state.currentWeight = getLastWeight(nextExercise.name);
             } else {
                 navigate('workoutComplete');
                 return;
+            }
+
+            const nextExercise = workout.exercises[state.currentExerciseIndex];
+            if (nextExercise.type === 'reps') {
+                state.currentReps = nextExercise.reps;
+                state.currentWeight = getLastWeight(nextExercise.name);
+            } else {
+                state.lastDuration = getLastDuration(nextExercise.name);
+                state.elapsedTime = 0; // Reset timer for next exercise
             }
             render();
         }
@@ -220,16 +253,11 @@
         function addExerciseToNewPlan() {
             if (state.newExercise.name) {
                 state.newPlan.exercises.push({ ...state.newExercise, id: Date.now() });
-                state.newExercise = { name: '', sets: 3, reps: 10 }; // Reset form
+                state.newExercise = { name: '', type: 'reps', sets: 3, reps: 10, duration: 60 };
                 render();
             }
         }
         
-        function removeExerciseFromNewPlan(exerciseId) {
-            state.newPlan.exercises = state.newPlan.exercises.filter(ex => ex.id !== exerciseId);
-            render();
-        }
-
         function saveNewPlan() {
             if (state.newPlan.name && state.newPlan.exercises.length > 0) {
                 state.plans.push({ ...state.newPlan, id: Date.now() });
@@ -238,55 +266,56 @@
                 navigate('dashboard');
             }
         }
-        
+
         // --- Event Delegation ---
-        // A single event listener manages all interactions, improving performance.
         app.addEventListener('click', e => {
-            const actionTarget = e.target.closest('[data-action]');
-            if (!actionTarget) return;
+            const target = e.target.closest('[data-action]');
+            if (!target) return;
+            const { action, id } = target.dataset;
 
-            const { action, id } = actionTarget.dataset;
-
-            switch (action) {
-                case 'navigate': navigate(id); break;
-                case 'start-workout': startWorkout(parseInt(id)); break;
-                case 'view-plan-history': viewPlanHistory(parseInt(id)); break;
-                case 'delete-plan': deletePlan(parseInt(id)); break;
-                case 'complete-set': completeSet(); break;
-                case 'add-exercise': addExerciseToNewPlan(); break;
-                case 'remove-exercise': removeExerciseFromNewPlan(parseInt(id)); break;
-                case 'save-plan': saveNewPlan(); break;
-                case 'update-reps':
-                    state.currentReps = Math.max(0, state.currentReps + parseInt(id));
+            const actions = {
+                'navigate': () => navigate(id),
+                'start-workout': () => startWorkout(parseInt(id)),
+                'view-plan-history': () => viewPlanHistory(parseInt(id)),
+                'complete-set': completeSet,
+                'start-timer': startTimer,
+                'stop-timer': stopTimer,
+                'add-exercise': addExerciseToNewPlan,
+                'save-plan': saveNewPlan,
+                'update-reps': () => {
+                    state.currentReps = Math.max(0, state.currentRps + parseInt(id));
                     render();
-                    break;
-                case 'update-weight':
+                },
+                'update-weight': () => {
                     state.currentWeight = Math.max(0, state.currentWeight + parseInt(id));
                     render();
-                    break;
-            }
+                },
+            };
+            
+            if (actions[action]) actions[action]();
         });
         
-        // Handles form inputs, updating state in real-time.
         app.addEventListener('input', e => {
-            const { field, value } = e.target.dataset;
-            const inputValue = e.target.type === 'number' ? parseInt(e.target.value) : e.target.value;
+            const { field } = e.target.dataset;
+            const value = e.target.type === 'number' ? parseInt(e.target.value) || 0 : e.target.value;
 
-            switch (field) {
-                case 'newPlanName': state.newPlan.name = inputValue; break;
-                case 'newPlanDay': state.newPlan.dayOfWeek = parseInt(inputValue); break;
-                case 'newExerciseName': state.newExercise.name = inputValue; break;
-                case 'newExerciseSets': state.newExercise.sets = parseInt(inputValue) || 1; break;
-                case 'newExerciseReps': state.newExercise.reps = parseInt(inputValue) || 1; break;
-                case 'currentReps': state.currentReps = parseInt(inputValue) || 0; break;
-                case 'currentWeight': state.currentWeight = parseInt(inputValue) || 0; break;
-            }
+            const fields = {
+                'newPlanName': () => state.newPlan.name = value,
+                'newPlanDay': () => state.newPlan.dayOfWeek = parseInt(value),
+                'newExerciseName': () => state.newExercise.name = value,
+                'newExerciseType': () => { state.newExercise.type = value; render(); },
+                'newExerciseSets': () => state.newExercise.sets = value,
+                'newExerciseReps': () => state.newExercise.reps = value,
+                'newExerciseDuration': () => state.newExercise.duration = value,
+                'currentReps': () => state.currentReps = value,
+                'currentWeight': () => state.currentWeight = value,
+            };
+
+            if (fields[field]) fields[field]();
         });
 
 
         // --- Render Functions ---
-        // Each function generates the HTML for a specific view.
-        
         function renderDashboard() {
             const todaysWorkout = getTodaysWorkout();
             return `
@@ -376,7 +405,7 @@
                                             ${exercise.sets.map(set => `
                                                 <div class="flex justify-between items-center py-1 px-3 bg-gray-50 rounded text-sm">
                                                     <span class="text-gray-600">Set ${set.set}</span>
-                                                    <span class="font-medium">${set.reps} reps × ${set.weight} lbs</span>
+                                                    <span class="font-medium">${set.type === 'reps' ? `${set.reps} reps × ${set.weight} lbs` : `${set.duration}s`}</span>
                                                 </div>
                                             `).join('')}
                                         </div>
@@ -385,16 +414,12 @@
                             </div>
                         </div>
                     `).join('')}
-
-                    <div class="flex gap-2">
-                        <button data-action="delete-plan" data-id="${state.selectedPlan.id}" class="w-1/2 bg-red-500 text-white p-4 rounded-xl font-semibold touch-manipulation active:bg-red-600">Delete</button>
-                        <button data-action="start-workout" data-id="${state.selectedPlan.id}" class="w-1/2 bg-green-600 text-white p-4 rounded-xl font-semibold touch-manipulation active:bg-green-700">Start</button>
-                    </div>
                 </div>
             `;
         }
 
         function renderCreatePlan() {
+            const isReps = state.newExercise.type === 'reps';
             return `
                 <div class="gradient-bg text-white p-6 flex items-center gap-3">
                     <button data-action="navigate" data-id="dashboard" class="touch-manipulation p-2 -ml-2">
@@ -402,7 +427,6 @@
                     </button>
                     <h1 class="text-xl font-bold">Create New Plan</h1>
                 </div>
-
                 <div class="p-4 md:p-6 space-y-6">
                     <div class="space-y-4 bg-white p-4 rounded-xl border">
                         <div>
@@ -421,14 +445,36 @@
                         <h3 class="font-semibold text-gray-800 mb-4">Add Exercise</h3>
                         <div class="space-y-3">
                             <input type="text" data-field="newExerciseName" value="${state.newExercise.name}" class="w-full p-3 border rounded-lg" placeholder="Exercise name">
+                            
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Exercise Type</label>
+                                <select data-field="newExerciseType" class="w-full p-3 border rounded-lg bg-white">
+                                    <option value="reps" ${isReps ? 'selected' : ''}>Reps & Weight</option>
+                                    <option value="time" ${!isReps ? 'selected' : ''}>Time</option>
+                                </select>
+                            </div>
+
                             <div class="flex gap-3">
-                                <div class="flex-1"><label class="block text-sm text-gray-600 mb-1">Sets</label><input type="number" data-field="newExerciseSets" value="${state.newExercise.sets}" class="w-full p-2 border rounded" min="1"></div>
-                                <div class="flex-1"><label class="block text-sm text-gray-600 mb-1">Reps</label><input type="number" data-field="newExerciseReps" value="${state.newExercise.reps}" class="w-full p-2 border rounded" min="1"></div>
+                                <div class="flex-1">
+                                    <label class="block text-sm text-gray-600 mb-1">Sets</label>
+                                    <input type="number" data-field="newExerciseSets" value="${state.newExercise.sets}" class="w-full p-2 border rounded" min="1">
+                                </div>
+                                ${isReps ? `
+                                <div class="flex-1">
+                                    <label class="block text-sm text-gray-600 mb-1">Reps</label>
+                                    <input type="number" data-field="newExerciseReps" value="${state.newExercise.reps}" class="w-full p-2 border rounded" min="1">
+                                </div>
+                                ` : `
+                                <div class="flex-1">
+                                    <label class="block text-sm text-gray-600 mb-1">Duration (s)</label>
+                                    <input type="number" data-field="newExerciseDuration" value="${state.newExercise.duration}" class="w-full p-2 border rounded" min="1">
+                                </div>
+                                `}
                             </div>
                             <button data-action="add-exercise" class="w-full bg-green-500 text-white p-2 rounded-lg font-medium touch-manipulation active:bg-green-600">Add Exercise</button>
                         </div>
                     </div>
-
+                    
                     ${state.newPlan.exercises.length > 0 ? `
                         <div class="bg-white p-4 rounded-xl shadow-sm border">
                             <h3 class="font-semibold text-gray-800 mb-3">Exercises (${state.newPlan.exercises.length})</h3>
@@ -437,11 +483,8 @@
                                     <div class="flex justify-between items-center p-2 bg-gray-50 rounded">
                                         <div>
                                             <span class="font-medium">${ex.name}</span>
-                                            <span class="text-sm text-gray-600 ml-2">${ex.sets} × ${ex.reps}</span>
+                                            <span class="text-sm text-gray-600 ml-2">${ex.type === 'reps' ? `${ex.sets} × ${ex.reps}` : `${ex.sets} × ${ex.duration}s`}</span>
                                         </div>
-                                        <button data-action="remove-exercise" data-id="${ex.id}" class="text-red-500 p-1">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                                        </button>
                                     </div>
                                 `).join('')}
                             </div>
@@ -455,10 +498,36 @@
 
         function renderWorkout() {
             const currentExercise = state.currentWorkout.exercises[state.currentExerciseIndex];
-            const totalSetsInWorkout = state.currentWorkout.exercises.reduce((sum, ex) => sum + ex.sets, 0);
-            const setsCompletedInPreviousExercises = state.currentWorkout.exercises.slice(0, state.currentExerciseIndex).reduce((sum, ex) => sum + ex.sets, 0);
-            const totalSetsCompleted = setsCompletedInPreviousExercises + state.currentSetIndex;
-            const progress = (totalSetsCompleted / totalSetsInWorkout) * 100;
+            const isReps = currentExercise.type === 'reps';
+            
+            let exerciseUI;
+
+            if (isReps) {
+                exerciseUI = `
+                    <div class="space-y-4">
+                        <div class="bg-white rounded-lg p-4 shadow-sm border"><label class="block text-sm font-medium text-gray-700 mb-2">Reps</label><div class="flex items-center justify-center space-x-3"><button data-action="update-reps" data-id="-1" class="w-12 h-12 bg-blue-500 text-white rounded-full flex items-center justify-center text-lg font-bold touch-manipulation active:bg-blue-600"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg></button><input type="number" data-field="currentReps" value="${state.currentReps}" class="w-24 text-center text-2xl font-bold border-b-2 py-2 px-3" min="0"><button data-action="update-reps" data-id="1" class="w-12 h-12 bg-blue-500 text-white rounded-full flex items-center justify-center text-lg font-bold touch-manipulation active:bg-blue-600"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></div></div>
+                        <div class="bg-white rounded-lg p-4 shadow-sm border"><label class="block text-sm font-medium text-gray-700 mb-2">Weight (lbs)</label><div class="flex items-center justify-center space-x-3"><button data-action="update-weight" data-id="-5" class="w-12 h-12 bg-blue-500 text-white rounded-full flex items-center justify-center text-lg font-bold touch-manipulation active:bg-blue-600"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg></button><input type="number" data-field="currentWeight" value="${state.currentWeight}" class="w-24 text-center text-2xl font-bold border-b-2 py-2 px-3" min="0"><button data-action="update-weight" data-id="5" class="w-12 h-12 bg-blue-500 text-white rounded-full flex items-center justify-center text-lg font-bold touch-manipulation active:bg-blue-600"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></div></div>
+                    </div>
+                    <button data-action="complete-set" class="w-full bg-green-600 text-white p-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 touch-manipulation active:bg-green-700">Complete Set</button>
+                `;
+            } else { // Time-based exercise
+                const recordDuration = state.lastDuration > 0 ? state.lastDuration : currentExercise.duration;
+                const isBeatingRecord = state.elapsedTime > recordDuration;
+                const timerDisplay = state.elapsedTime.toFixed(1) + 's';
+
+                exerciseUI = `
+                    <div class="bg-white rounded-lg p-6 shadow-sm border text-center">
+                        <p class="text-sm font-medium text-gray-500">Record: ${recordDuration}s</p>
+                        <p class="text-6xl font-bold my-4 ${isBeatingRecord ? 'text-green-500' : ''}">${timerDisplay}</p>
+                        ${state.timerState === 'idle' && state.lastDuration > 0 ? `<p class="font-semibold text-blue-600 text-lg animate-pulse">BEAT IT!</p>` : ''}
+                        ${isBeatingRecord ? `<p class="font-semibold text-green-600 text-lg">NEW RECORD!</p>` : ''}
+                    </div>
+                    ${state.timerState === 'running' 
+                        ? `<button data-action="stop-timer" class="w-full bg-red-500 text-white p-4 rounded-xl font-bold text-lg touch-manipulation">Done</button>`
+                        : `<button data-action="start-timer" class="w-full bg-green-600 text-white p-4 rounded-xl font-bold text-lg touch-manipulation">Start</button>`
+                    }
+                `;
+            }
 
             return `
                 <div class="gradient-green text-white p-6 sticky top-0 shadow-md">
@@ -467,24 +536,13 @@
                         <h1 class="text-xl font-bold">${state.currentWorkout.name}</h1>
                         <div class="w-10"></div>
                     </div>
-                    <div class="bg-green-700 rounded-full h-2"><div class="bg-white rounded-full h-2 transition-all duration-300" style="width: ${progress}%"></div></div>
                 </div>
-
                 <div class="p-4 md:p-6 space-y-6">
                     <div class="text-center">
                         <h2 class="text-2xl font-bold text-gray-800 mb-1">${currentExercise.name}</h2>
                         <p class="text-gray-600">Set ${state.currentSetIndex + 1} of ${currentExercise.sets}</p>
                     </div>
-
-                    <div class="space-y-4">
-                        <div class="bg-white rounded-lg p-4 shadow-sm border"><label class="block text-sm font-medium text-gray-700 mb-2">Reps</label><div class="flex items-center justify-center space-x-3"><button data-action="update-reps" data-id="-1" class="w-12 h-12 bg-blue-500 text-white rounded-full flex items-center justify-center text-lg font-bold touch-manipulation active:bg-blue-600"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg></button><input type="number" data-field="currentReps" value="${state.currentReps}" class="w-24 text-center text-2xl font-bold border-b-2 py-2 px-3" min="0"><button data-action="update-reps" data-id="1" class="w-12 h-12 bg-blue-500 text-white rounded-full flex items-center justify-center text-lg font-bold touch-manipulation active:bg-blue-600"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></div></div>
-                        <div class="bg-white rounded-lg p-4 shadow-sm border"><label class="block text-sm font-medium text-gray-700 mb-2">Weight (lbs)</label><div class="flex items-center justify-center space-x-3"><button data-action="update-weight" data-id="-5" class="w-12 h-12 bg-blue-500 text-white rounded-full flex items-center justify-center text-lg font-bold touch-manipulation active:bg-blue-600"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg></button><input type="number" data-field="currentWeight" value="${state.currentWeight}" class="w-24 text-center text-2xl font-bold border-b-2 py-2 px-3" min="0"><button data-action="update-weight" data-id="5" class="w-12 h-12 bg-blue-500 text-white rounded-full flex items-center justify-center text-lg font-bold touch-manipulation active:bg-blue-600"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></div></div>
-                    </div>
-
-                    <button data-action="complete-set" class="w-full bg-green-600 text-white p-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 touch-manipulation active:bg-green-700">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg>
-                        Complete Set
-                    </button>
+                    ${exerciseUI}
                 </div>
             `;
         }
@@ -508,9 +566,6 @@
             `;
         }
 
-        // --- Main Render Function ---
-        // The heart of the UI, which decides which view to show.
-        // It now includes a fade effect for smoother transitions.
         function render() {
             const viewMap = {
                 'dashboard': renderDashboard,
@@ -521,7 +576,6 @@
             };
             const newHtml = (viewMap[state.currentView] || viewMap['dashboard'])();
             
-            // Fade out, update content, then fade in
             app.classList.add('fade-out');
             setTimeout(() => {
                 app.innerHTML = newHtml;
@@ -530,13 +584,11 @@
             }, 150);
         }
 
-        // --- App Initialization ---
         function init() {
             loadData();
             render();
         }
-
-        // Start the app
+        
         init();
     </script>
 </body>

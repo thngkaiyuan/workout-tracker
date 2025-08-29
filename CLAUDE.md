@@ -96,6 +96,12 @@ Sessions are tracked with unique `sessionId` timestamps. Each workout record inc
 ## TODOs
 
 - Add tests for peace of mind development
+  - [x] Set up Playwright testing framework
+  - [ ] Test Dashboard & Navigation flow
+  - [ ] Test Plan Creation flow  
+  - [ ] Test Workout Execution flow
+  - [ ] Test History & Data Persistence
+  - [ ] Test PWA Functionality
 - Add ability to edit/delete workout records
 - Allow drag-and-drop reordering of exercises during workout plan creation
 - Allow users to export all data to a file for backup/portability

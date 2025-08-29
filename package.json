@@ -1,0 +1,28 @@
+{
+  "name": "workout-tracker",
+  "version": "1.0.0",
+  "description": "A simple, offline-capable Progressive Web App for tracking your workouts. Create workout plans, execute them with guided assistance, and track your progress over time.",
+  "main": "service-worker.js",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "serve": "python3 -m http.server 8000"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thngkaiyuan/workout-tracker.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/thngkaiyuan/workout-tracker/issues"
+  },
+  "homepage": "https://github.com/thngkaiyuan/workout-tracker#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  }
+}

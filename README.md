@@ -81,8 +81,8 @@ For developers and contributors, see [CLAUDE.md](./CLAUDE.md) for detailed archi
 
 - [ ] Add tests for peace of mind development
   - [x] Set up Playwright testing framework
-  - [ ] Test Dashboard & Navigation flow
-  - [ ] Test Plan Creation flow  
+  - [x] Test Dashboard & Navigation flow (40 tests)
+  - [x] Test Plan Creation flow (60 tests)
   - [ ] Test Workout Execution flow
   - [ ] Test History & Data Persistence
   - [ ] Test PWA Functionality

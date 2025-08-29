@@ -91,14 +91,16 @@ Sessions are tracked with unique `sessionId` timestamps. Each workout record inc
 - Add tests when making changes to core functionality (state management, data persistence, UI rendering)
 - Test manually across different devices and screen sizes
 - Verify PWA functionality works offline
-- No formal test framework is currently in place - testing is done manually via browser development tools
+- Playwright E2E testing framework with comprehensive test coverage (110 tests)
+- Tests run across 5 browsers/devices: Chromium, Firefox, WebKit, Mobile Chrome, Mobile Safari
+- CI/CD pipeline gates deployment on test success
 
 ## TODOs
 
 - Add tests for peace of mind development
   - [x] Set up Playwright testing framework
-  - [ ] Test Dashboard & Navigation flow
-  - [ ] Test Plan Creation flow  
+  - [x] Test Dashboard & Navigation flow (40 tests)
+  - [x] Test Plan Creation flow (60 tests)
   - [ ] Test Workout Execution flow
   - [ ] Test History & Data Persistence
   - [ ] Test PWA Functionality

@@ -11,7 +11,10 @@ export default defineConfig({
   /* Opt out of parallel tests on CI. */
   workers: process.env.CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
+  reporter: [
+    ['html', { open: 'never' }],
+    ['list']
+  ],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
@@ -57,5 +60,6 @@ export default defineConfig({
     command: 'python3 -m http.server 8000',
     url: 'http://127.0.0.1:8000',
     reuseExistingServer: !process.env.CI,
+    timeout: 30000,
   },
 });

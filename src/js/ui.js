@@ -172,9 +172,19 @@ function renderPlanHistory() {
                                                 <p class="font-medium text-gray-800">${record.exercise}</p>
                                                 <p class="text-sm text-gray-500">Set ${record.set}</p>
                                             </div>
-                                            <div class="text-right">
-                                                <p class="font-semibold text-gray-800">${record.type === 'reps' ? `${record.reps} reps` : `${record.duration}s`}</p>
-                                                ${record.type === 'reps' ? `<p class="text-sm text-gray-500">${record.weight} lbs</p>` : ''}
+                                            <div class="flex items-center gap-2">
+                                                <div class="text-right">
+                                                    <p class="font-semibold text-gray-800">${record.type === 'reps' ? `${record.reps} reps` : `${record.duration}s`}</p>
+                                                    ${record.type === 'reps' ? `<p class="text-sm text-gray-500">${record.weight} lbs</p>` : ''}
+                                                </div>
+                                                <div class="flex flex-col">
+                                                    <button data-action="start-edit-record" data-id="${record.id}" class="p-1 text-gray-400 hover:text-blue-600">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z"></path></svg>
+                                                    </button>
+                                                    <button data-action="delete-record" data-id="${record.id}" class="p-1 text-gray-400 hover:text-red-600">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     `).join('')}
@@ -389,6 +399,42 @@ function renderWorkout() {
     `;
 }
 
+function renderEditRecordModal() {
+    if (!state.editingRecordId) return '';
+
+    const record = state.editingRecord;
+    const isReps = record.type === 'reps';
+
+    return `
+        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+                <h2 class="text-xl font-bold mb-4">Edit Record</h2>
+                <div class="space-y-4">
+                    ${isReps ? `
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Reps</label>
+                            <input type="number" data-field="editing-record-reps" value="${record.reps}" class="w-full p-2 border rounded mt-1">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Weight (lbs)</label>
+                            <input type="number" data-field="editing-record-weight" value="${record.weight}" class="w-full p-2 border rounded mt-1">
+                        </div>
+                    ` : `
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Duration (s)</label>
+                            <input type="number" data-field="editing-record-duration" value="${record.duration}" class="w-full p-2 border rounded mt-1">
+                        </div>
+                    `}
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button data-action="cancel-edit-record" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg">Cancel</button>
+                    <button data-action="update-record" class="bg-blue-600 text-white px-4 py-2 rounded-lg">Save</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 function renderWorkoutComplete() {
     return `
         <div class="gradient-green text-white p-6 text-center">
@@ -416,7 +462,8 @@ export function render() {
         'workout': renderWorkout,
         'workoutComplete': renderWorkoutComplete,
     };
-    const newHtml = (viewMap[state.currentView] || viewMap['dashboard'])();
+    let newHtml = (viewMap[state.currentView] || viewMap['dashboard'])();
+    newHtml += renderEditRecordModal();
 
     app.classList.add('fade-out');
     setTimeout(() => {

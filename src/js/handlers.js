@@ -108,6 +108,7 @@ function completeSet() {
     const currentExercise = state.currentWorkout.exercises[state.currentExerciseIndex];
 
     state.workoutHistory.push({
+        id: Date.now(),
         date: new Date().toISOString(),
         exercise: currentExercise.name,
         set: state.currentSetIndex + 1,
@@ -142,6 +143,7 @@ function stopTimer() {
     const finalDuration = parseFloat(state.elapsedTime.toFixed(1)); // Save the final elapsed time
 
     state.workoutHistory.push({
+        id: Date.now(),
         date: new Date().toISOString(),
         exercise: currentExercise.name,
         set: state.currentSetIndex + 1,
@@ -197,6 +199,40 @@ function saveOrUpdateExercise() {
     // Reset form and editing state
     state.editingExerciseId = null;
     state.newExercise = { name: '', type: 'reps', sets: 3, reps: 10, duration: 60 };
+    render();
+}
+
+function deleteRecord(recordId) {
+    if (confirm('Are you sure you want to delete this record?')) {
+        state.workoutHistory = state.workoutHistory.filter(record => record.id !== recordId);
+        saveData();
+        render();
+    }
+}
+
+function startEditRecord(recordId) {
+    const record = state.workoutHistory.find(r => r.id === recordId);
+    if (record) {
+        state.editingRecordId = recordId;
+        state.editingRecord = { ...record }; // Create a copy for editing
+        render();
+    }
+}
+
+function updateRecord() {
+    if (!state.editingRecordId) return;
+
+    const index = state.workoutHistory.findIndex(r => r.id === state.editingRecordId);
+    if (index !== -1) {
+        state.workoutHistory[index] = { ...state.editingRecord };
+        saveData();
+    }
+    cancelEditRecord(); // Close modal and reset state
+}
+
+function cancelEditRecord() {
+    state.editingRecordId = null;
+    state.editingRecord = null;
     render();
 }
 
@@ -268,7 +304,11 @@ export function initializeEventListeners() {
             'delete-exercise': () => deleteExercise(parseInt(id)),
             'move-exercise': () => moveExercise(parseInt(id), direction),
             'start-edit-exercise': () => startEditExercise(parseInt(id)),
+            'delete-record': () => deleteRecord(parseInt(id)),
             'cancel-edit': cancelEdit,
+            'start-edit-record': () => startEditRecord(parseInt(id)),
+            'update-record': updateRecord,
+            'cancel-edit-record': cancelEditRecord,
             'save-and-exit': saveAndExitWorkout,
             'finish-early': finishWorkoutEarly,
             'update-reps': () => {
@@ -298,6 +338,9 @@ export function initializeEventListeners() {
             'newExerciseDuration': () => state.newExercise.duration = value,
             'currentReps': () => state.currentReps = value,
             'currentWeight': () => state.currentWeight = value,
+            'editing-record-reps': () => state.editingRecord.reps = value,
+            'editing-record-weight': () => state.editingRecord.weight = value,
+            'editing-record-duration': () => state.editingRecord.duration = value,
         };
 
         if (fields[field]) fields[field]();

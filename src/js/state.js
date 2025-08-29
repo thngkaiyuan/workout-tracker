@@ -26,5 +26,7 @@ export let state = {
         dayOfWeek: today,
         exercises: []
     },
-    newExercise: { name: '', type: 'reps', sets: 3, reps: 10, duration: 60 }
+    newExercise: { name: '', type: 'reps', sets: 3, reps: 10, duration: 60 },
+    editingRecordId: null,
+    editingRecord: null,
 };

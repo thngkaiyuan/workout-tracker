@@ -80,9 +80,18 @@ Sessions are tracked with unique `sessionId` timestamps. Each workout record inc
 - `src/css/style.css`: Custom styles supplementing Tailwind CSS
 - `src/assets/`: App icons for PWA installation
 
-## Testing
+## Development Guidelines
 
-No formal test framework is currently in place. Testing is done manually via browser development tools.
+### Documentation Updates
+- Always update README.md when adding new features or changing user-facing functionality
+- Keep the TODO list in both CLAUDE.md and README.md synchronized
+- Update feature descriptions in both files when implementing new capabilities
+
+### Testing
+- Add tests when making changes to core functionality (state management, data persistence, UI rendering)
+- Test manually across different devices and screen sizes
+- Verify PWA functionality works offline
+- No formal test framework is currently in place - testing is done manually via browser development tools
 
 ## TODOs
 
